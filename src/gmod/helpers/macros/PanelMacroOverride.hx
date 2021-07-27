@@ -42,7 +42,7 @@ class PanelMacroOverride {
                             var str = 'PANEL.$name = function(dis,...) dis._gHaxeBurrow = {0}.new(dis) dis._gHaxeBurrow:$name(...) end';
                             exprBuffer.push(macro untyped __lua__($v{str},$i{classname}));
                         } else {
-                            var str = 'PANEL.$name = function(dis,...) return dis:$name(...) end';
+                            var str = 'PANEL.$name = function(dis,...) return dis._gHaxeBurrow:$name(...) end';
                             exprBuffer.push(macro untyped __lua__($v{str}));
                         }
                     }
@@ -52,6 +52,11 @@ class PanelMacroOverride {
         if (!overrideninit) {
             exprBuffer.push(macro untyped __lua__("PANEL.Init = function (dis,...) dis._gHaxeBurrow = {0}.new(dis) end",$i{classname}));
         }
+        // Really dumb solution since I don't actually understand any of this
+        var superPanel = superType.name.substring(12);
+        var vguiRegisterStr = 'vgui.Register({0}, PANEL, {1})';
+        exprBuffer.push(macro untyped __lua__($v{vguiRegisterStr}, $v{cls.name}, $v{superPanel}));
+
         cls.meta.add(":FirstPanel",[],Context.currentPos());
         var ourtype = Context.toComplexType(Context.getLocalType());
         var superreal = switch (superType.meta.extract(":RealPanel")) {
