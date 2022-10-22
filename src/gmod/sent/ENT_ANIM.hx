@@ -1,8 +1,12 @@
 package gmod.sent;
 
+@:TYPE("anim")
+@:gclass("base_anim")
 extern class ENT_ANIM extends gmod.sent.ENT {
 	
     public static inline final TYPE = "anim";
+
+	public static inline final gclass:EntityClass<ENT_ANIM> = "base_anim";
 
     #if server
     /**

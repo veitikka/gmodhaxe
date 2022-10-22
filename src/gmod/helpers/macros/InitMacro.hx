@@ -1,5 +1,7 @@
 package gmod.helpers.macros;
 
+import haxe.Template;
+import haxe.Resource;
 #if macro
 import haxe.macro.Expr.Function;
 import haxe.macro.Expr.FieldType;
@@ -39,48 +41,18 @@ class InitMacro {
     static function get_pos() {
         return Context.currentPos();
     }
-    #end
-
-    static final nato = [
-        "Alpha", 
-        "Bravo", 
-        "Charlie", 
-        "Delta", 
-        "Echo", 
-        "Foxtrot", 
-        "Golf", 
-        "Hotel", 
-        "India", 
-        "Juliett", 
-        "Kilo", 
-        "Lima", 
-        "Mike", 
-        "November", 
-        "Oscar", 
-        "Papa", 
-        "Quebec", 
-        "Romeo", 
-        "Sierra", 
-        "Tango", 
-        "Uniform", 
-        "Victor", 
-        "Whiskey", 
-        "Xray", 
-        "Yankee", 
-        "Zulu"
-    ];
+    #end 
 
     static public function init() {
         Compiler.include("gmod.helpers.macros.include",true,null,null,true);
         Compiler.keep("gmod.helpers.macros.include",null,true);
         var buildident = Math.floor(Math.random() * 729);
-        buildIdent = nato[Math.floor(buildident / 27)] + " " + nato[buildident % 27];
+        buildIdent = Util.nato[Math.floor(buildident / 27)] + " " + Util.nato[buildident % 27];
         no.Spoon.bend("Sys",macro class {
             public static function time():Float {
                 return gmod.Gmod.SysTime();
             }
         });
-        
         
         #if (haxe >= "4.2.0")
         no.Spoon.bend("haxe.format.JsonParser",macro class {
@@ -90,7 +62,7 @@ class InitMacro {
         });
         #end
         if (!Context.defined("noGmodHook")) {        
-            Compiler.addGlobalMetadata("","@:build(gmod.helpers.macros.HookMacro.build())");
+            Compiler.addGlobalMetadata("","@:build(gmod.helpers.macros.HookMacro.build())"); 
         }
         var x:TypeDefinition = {
             pack : ["gmod","helpers","macros"],
@@ -162,14 +134,16 @@ class InitMacro {
         if (!FileSystem.exists(gmfolder)) FileSystem.createDirectory(gmfolder);
         if (Context.defined("client")) {
             if (!Context.defined("noGenInit")) {
+                var temp = new haxe.Template(Resource.getString("gmodhaxe_cl_init"));
                 File.saveContent('$gmfolder/cl_init.lua',
-                'local exports = include("$clientName.lua")');
+                temp.execute({clientName : clientName}));
             }
             Compiler.setOutput('$gmfolder/$clientName.lua');
         } else if (Context.defined("server")) {
             if (!Context.defined("noGenInit")) {
+                var temp = new haxe.Template(Resource.getString("gmodhaxe_init"));
                 File.saveContent('$gmfolder/init.lua',
-                'AddCSLuaFile("$clientName.lua")\nlocal exports = include("$serverName.lua")');
+                temp.execute({clientName : clientName, serverName : serverName}));
             }
             Compiler.setOutput('$gmfolder/$serverName.lua');
         }
@@ -179,11 +153,12 @@ class InitMacro {
         entLuaStorage = '__${addonName}_ents';
         baseEntFolder = 'generated/$addonName/lua';
         FileSystem.createDirectory('generated/$addonName/lua/$addonName');
-        final initFile:String = 'local exports if SERVER then AddCSLuaFile("$addonName/$clientName.lua") exports = include("$addonName/$serverName.lua") end
-if CLIENT then exports = include("$addonName/$clientName.lua") end';
+       
         FileSystem.createDirectory('generated/$addonName/lua/autorun/');
         if (!Context.defined("noGenInit")) {
-            File.saveContent('generated/$addonName/lua/autorun/haxe_init_$addonName.lua',initFile);
+            var temp = new haxe.Template(Resource.getString("gmodhaxe_autorun"));
+            File.saveContent('generated/$addonName/lua/autorun/haxe_init_$addonName.lua',
+            temp.execute({addonName : addonName, clientName : clientName, serverName: serverName}));
         }
         if (Context.defined("client")) {
             Compiler.setOutput('generated/$addonName/lua/$addonName/$clientName.lua');

@@ -1,5 +1,8 @@
 package gmod.helpers.macros;
 
+import haxe.ds.BalancedTree;
+import gmod.helpers.macros.Util;
+import haxe.macro.Type.TypedExpr;
 import haxe.macro.Compiler;
 import haxe.macro.CompilationServer;
 #if (macro)
@@ -8,6 +11,7 @@ using StringTools;
 import haxe.macro.Type.ClassField;
 import haxe.macro.Context;
 import haxe.macro.Expr;
+import gmod.helpers.macros.Util.TypePathHelper;
 using haxe.macro.ExprTools;
 using haxe.macro.TypeTools;
 using haxe.macro.ExprTools.ExprArrayTools;
@@ -28,6 +32,18 @@ private enum MType {
     Gamemode;
     Swep;
     Effect;
+}
+
+typedef GmodExtern = {
+    link : haxe.macro.Type,
+    rawClass : haxe.macro.Type
+}
+
+typedef GenerateGmod = {
+    target : ClassType,
+    targetFields : Array<Field>,
+    gmodParent : TypePathHelper,
+    ?markExpose : (meta:String) -> Bool,
 }
 
 class PanelMacro {
@@ -63,62 +79,12 @@ class PanelMacro {
         var complextype = TPath({pack : ["gmod","helpers"],name : "HaxeMultiReturn",
                     params : [TPType(TPath({pack : [],name : 'A_$name'})) ]});
         multireturnMap.set(cls.name,complextype);
-        generates.set('A_$name',anon);
+        generatedStorage.set('A_$name',anon);
         return complextype;
     }
-
-    static function argToFuncArg(x:{name: String,opt : Bool,t: haxe.macro.Type}):FunctionArg {
-        var arg:FunctionArg = {
-            name: x.name,
-            opt: x.opt,
-            type : Context.toComplexType(x.t)
-        }
-        return arg;
-    }
-
-    public static function cleanClassFuncToField(x:ClassField):Field {
-        var args:Array<FunctionArg> = [];
-        var exprArgs = [];
-        var ret:haxe.macro.Type;
-        switch (x.type) {
-            case TFun(oldArgs, oldRet):
-                exprArgs = [];
-                for (oldArg in oldArgs) {
-                    args.push(argToFuncArg(oldArg));
-                    exprArgs.push(macro $i{oldArg.name});
-                }
-                ret = oldRet;
-            default:
-                throw "unhandled yet...";
-        }
-        var func:Function = {
-            args : args,
-            ret : Context.toComplexType(ret),
-            expr : null
-        }
-        var field:Field = {
-            kind : FieldType.FFun(func),
-            name : x.name,
-            pos : Context.currentPos(),
-            doc : x.doc,
-            access: []
-        }
-        return field;
-    }
-    static function classVarToField(x:ClassField):Field {
-        return switch (x.expr()) {
-            case null:
-                null;
-            case {expr : TConst(TString(s))}:
-                {
-                    name : x.name,
-                    kind : FVar(x.type.toComplexType(),macro $v{s}),
-                    pos : Context.currentPos(),
-                    access : [Access.AStatic,Access.AInline]
-                };
-            default:
-                throw "hmm";
-        };
+    
+    static function shouldProcessClassFunc(classField:ClassField) {
+        return classField.meta.has(":hook");
     }
 
     static function classFuncToField(classField:ClassField):Field {
@@ -132,18 +98,16 @@ class PanelMacro {
                 exprArgs = args.map((arg) -> macro $i{arg.name});
                 funcReturn = ret;
             case y:
-                trace(classField);
-                throw "unhandled yet...";
+                Context.error("Unhandled classFuncToField",classField.pos);
+                throw null;
         }
         final name = classField.name;
-        final isHook = classField.meta.has(":hook");
-        if (!isHook) return null;
         final func:Function = switch (funcReturn) {
             case TInst(_.get() => luaMR = {name : n} , _) if (n.endsWith("Return")):
                 {
                     args : funcArgs,
-                    ret : generateMultiReturn(luaMR),
-                    expr :null
+                    ret : generateMultiReturn(luaMR), 
+                    expr : null
                 }
             case ret:
                 {
@@ -152,76 +116,161 @@ class PanelMacro {
                     expr : null
                 };
         }
-        final access:Array<Access> = switch (isHook) {
-            case false:
-                [Access.AFinal,Access.APublic]; //add override here if we revert...
-            default:
-                [];
-        }
         return {
             kind : FieldType.FFun(func),
             name : classField.name,
             pos : Context.currentPos(),
             doc : classField.doc,
-            access: access
+            access: if (!classField.isPublic) [Access.APrivate] else [], //always a hook so mneh,
+            meta : classField.meta.get().concat([{
+                name: ":inheritDoc",
+                pos: Context.currentPos()
+            }])
         };
     }
 
-    static function generateNewClass(cls:ClassType,mType:MType,first=false) {
-        var super;
+    static function shouldGenGmodExtField(field:Field):Bool {
+        return switch (field.kind) {
+            case FFun({args : args, ret : ret}) if (
+                args.exists((a) -> a.type == null) || ret == null):
+                Context.warning("Cannot generate field without full type annotations",field.pos);
+                false;
+            case FVar(null, _) 
+            | FProp(_, _, null, _):
+                Context.warning("Cannot generate field without full type annotations",field.pos);
+                false;
+            default:
+                true;
+        }
+    }
+
+    static function genGmodExtFields(field:Field,superType:ClassType):Field {
+        final over = superType.findField(field.name) != null;
+        final newKind = switch (field.kind) {
+            case FFun(f):
+                FFun({
+                    args : f.args,
+                    params: f.params,
+                    ret: f.ret,
+                    expr : null
+                });
+            case FVar(t, e):
+                FVar(t,null);
+            case FProp(get, set, t, e):
+                FProp(get,set,t,null);
+        }
+        return {
+            kind : newKind,
+            doc: field.doc,
+            meta: field.meta,
+            name: field.name,
+            pos: Context.currentPos(),
+            access: if (over) [AOverride] else []
+        }
+    }
+
+    public static function generateGmodSideExtern(gen:GenerateGmod):GmodExtern {
+        if (gen.markExpose == null) gen.markExpose = (name) -> return name == ":exposeGmod";
+        final target = gen.target;
+        final targetFields = gen.targetFields;
+        final targetGmod = gen.gmodParent;
+        final gmodExternName = '_Gmod${target.name}';
+        final linkExternName = 'Gmod${target.name}';
+        final curMod:TypePathHelper = Context.getLocalModule().split(".");        
+        final parentPath:TypePath = targetGmod;
+        if (typeExists(gmodExternName) || typeExists(linkExternName) ) { 
+            return {link : Context.getType(linkExternName), rawClass: Context.getType(gmodExternName)};
+        }
+        final gmodExtern:TypeDefinition = macro class $gmodExternName extends $parentPath {
+
+        };
+        gmodExtern.pack = [];
+        var fields = targetFields.filter((f) -> 
+            f.meta.exists((m) -> gen.markExpose(m.name)));
+        final gmodSuperType = try {
+            targetGmod.toComplexType().toType().getClass();
+        } catch (e) {
+            Context.error("Failed to get gmodSuperType",Context.currentPos());
+            return null;
+        }
+        final newFields = [for (f in fields)
+            
+            if (shouldGenGmodExtField(f)) {
+                genGmodExtFields(f,gmodSuperType);
+            }
+        ];
+        gmodExtern.fields = newFields;
+        gmodExtern.isExtern = true;
+        Context.defineType(gmodExtern);
+        final gmodType = Context.getType(gmodExternName).toComplexType();
+        final otherType = Context.getLocalType().toComplexType();
+        final linkType = (macro : gmod.helpers.GLinked<$gmodType,$otherType>);
+        Context.defineType({
+            pack: [],
+            name: linkExternName,
+            pos: Context.currentPos(),
+            kind: TDAlias(linkType),
+            fields: []
+        });
+        if (!typeExists(gmodExternName) || !(typeExists(linkExternName))) {
+            Context.error("Failed to generate gmod externs",gen.target.pos);
+            return null;
+        }
+        return {
+            link : Context.getType(linkExternName),
+            rawClass : Context.getType(gmodExternName)
+        }
+    }
+
+    
+
+    static function generateHaxeSideExtern(cls:ClassType,mType:MType,first=false) {
         var extendname;
         var newCls;
-        var clsname = 'PanelHelper_${cls.name}';
+        var clsname = 'HaxeGenExtern_${cls.name}';
         switch (cls.superClass) {
-        case null:
-            extendname = null;
-            newCls = macro class $clsname {//extends panelhelper
-                
-            }
-        case {t: _.get() => superType}:
-            if (!generate.exists(superType.name)) {
-                generateNewClass(superType,mType);
-            }
-            extendname = 'PanelHelper_${superType.name}';
-            var path:TypePath = {pack : [],name : extendname,params: [TPType((macro : T))]};
-            newCls = macro class $clsname extends $path {
-            }
+            case null:
+                extendname = null;
+                newCls = macro class $clsname {
+                    
+                }
+            case {t: _.get() => superType}:
+                if (!generate.exists(superType.name)) {
+                    generateHaxeSideExtern(superType,mType);
+                }
+                extendname = 'HaxeGenExtern_${superType.name}';
+                var path:TypePath = {pack : [],name : extendname};
+                newCls = macro class $clsname extends $path {
+                }
         }
-        newCls.meta.push({
-            name: ":PanelHelper",
-            pos: Context.currentPos()
-        });
+        newCls.meta = cls.meta.get();
         newCls.isExtern = true;
-        var rpPack = cls.pack.copy();
-        rpPack.push(cls.name);
+        var rpPack = cls.pack.concat([cls.name]);
         var newarray = rpPack.map((str) -> macro $v{str});
-        newCls.meta.push({
-            name: ":RealPanel",
+        newCls.meta = newCls.meta.concat([{
+            name: ":RealExtern",
             pos: Context.currentPos(),
             params: [macro $a{newarray}]
-        });
-        newCls.meta.push({
+        }
+        ,{ 
             name : ":native",
             pos : Context.currentPos(),
-            params: [macro '{} or a'] //change to x if dump=pretty
-        });
-        newCls.params = [{name: "T",constraints: [TPath({pack : cls.pack,name : cls.name})]}];
-        for (clsfield in cls.fields.get().concat(cls.statics.get())) {
-
-            switch (clsfield.kind) {
-            case FMethod(_):
-                var newfield = classFuncToField(clsfield);
-                if (newfield != null) {
-                    newCls.fields.push(newfield);
-                }
-            case FVar(_,_):
-
-                var newfield = classVarToField(clsfield);
-                if (newfield != null) {
-                    newCls.fields.push(newfield);
-                }
-            }
+            params: [macro '{} or a'] //{prototype = {}} does not work... we've gone over this
         }
+        ,{
+            name: ":HaxeGenExtern",
+            pos: Context.currentPos()
+        },{
+            name: ":GmodClassName",
+            pos : Context.currentPos(),
+            params : [macro $v{cls.name}]
+        }]);
+        newCls.fields = [
+            for (clsField in cls.fields.get().concat(cls.statics.get()))
+                if (clsField.kind.match(FMethod(_)) && shouldProcessClassFunc(clsField)) {
+                    classFuncToField(clsField);
+                }
+        ];
         if (first) {
             newCls.meta.push({
                 name: ":autoBuild",
@@ -240,23 +289,29 @@ class PanelMacro {
                     },
             });
         }
-        generates.set('PanelHelper_${cls.name}',newCls);
-        if (!generated) {
-            Context.onTypeNotFound(callback);
-            generated = true;
-        }
+        generatedStorage.set('HaxeGenExtern_${cls.name}',newCls);
         generate.set(cls.name,true);
     }
 
-    static var generates:Map<String,haxe.macro.Expr.TypeDefinition> = [];
+    static var generatedStorage:Map<String,haxe.macro.Expr.TypeDefinition> = [];
 
     static var generated = false;
 
-    static function callback(x:String) {
-        return generates.get(x);
+    static function enableNotFound() {
+        if (!generated) {
+            Context.onTypeNotFound((clsName) -> {
+                return if (generatedStorage.exists(clsName)) {
+                    generatedStorage.get(clsName);
+                } else {
+                    null;
+                }
+            });
+            generated = true;
+        }
     }
 
     static function build(x:MType):ComplexType {
+        enableNotFound();
         var type = Context.getLocalType();
         var cls = switch (type) {
             case TInst(_,[TInst(_.get() => c,_)])://
@@ -265,15 +320,13 @@ class PanelMacro {
                 trace("Couldn't find this panel");
                 return null;
         }
-        generateNewClass(cls,x,true);
+        generateHaxeSideExtern(cls,x,true);
         var tp2:TypePath = {pack : cls.pack,name : cls.name}
-        var tp:TypePath = {pack : [],name : 'PanelHelper_${cls.name}',params : 
-        [TPType(TPath(
-           tp2 
-        ))]} 
+        var tp:TypePath = {pack : [],name : 'HaxeGenExtern_${cls.name}'} 
         var rtn = TPath(tp);
         return rtn; 
     }
+
 
     public static function buildGamemode():ComplexType {
         return build(Gamemode);

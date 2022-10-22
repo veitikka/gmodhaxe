@@ -1,6 +1,10 @@
 package gmod.helpers.macros;
 
+import haxe.macro.Type.TypedExpr;
+import haxe.Resource;
 #if (macro)
+import gmod.helpers.macros.Util;
+
 import gmod.helpers.macros.InitMacro;
 import sys.FileSystem;
 import sys.io.File;
@@ -9,15 +13,17 @@ import haxe.macro.Expr;
 using haxe.macro.ExprTools;
 using haxe.macro.TypeTools;
 using haxe.macro.TypedExprTools;
+using Lambda;
 
 private typedef Generate = {
     genName : String,
     ?entLuaType : String,
     funcs : Array<Field>,
-    properties : {},
+    properties : Bool,
     esent : ESent,
     overridenInit : Bool,
-    overridenThink : Bool
+    overridenThink : Bool,
+    base : String
 }
 
 private enum ESent {
@@ -34,113 +40,154 @@ class SentMacro {
 
     static function build(esent:ESent):Array<Field> {
         var cls = Context.getLocalClass().get();
-        if (cls.meta.has(":PanelHelper")) return null;
+        if (cls.meta.has(":HaxeGenExtern")) return null;
+        if (cls.meta.has(":Generated")) return null;
         switch [esent,Context.defined("server")] {
             case [Effect,true]:
-                throw "Effects aren't on the server...";
+                Context.error("Effects aren't on the server",cls.pos);
+                return null;
             default:
         }
         var properties = null;
-        var type = Context.toComplexType(Context.getLocalType());
         var fields = Context.getBuildFields();
         var superType = cls.superClass.t.get();
         var overridenInit = false;
         var overridenThink = false;
         var fOverride:Array<Field> = [];
-        var exprBuffer = macro {}
         for (field in fields) {
             switch [field.name,field.kind] {
                 case ["properties",FVar(_, e)]:
-                    try {
-                        properties = e.getValue();
-                    } catch (x:Dynamic) {
-                        trace("Unable to get the value of properties");
+                    if (!field.access.contains(Access.AStatic)) {
+                        Context.error("Properties must be static!",field.pos);
                         return null;
                     }
+                    if (!field.access.contains(Access.AFinal)) {
+                        field.access.push(AFinal);
+                    }
+                    field.kind = switch (esent) {
+                        case Swep:
+                            FVar(Context.getType("gmod.helpers.swep.SwepBuild.SwepFields").toComplexType(),e);
+                        case Sent:
+                            FVar(Context.getType("gmod.helpers.sent.SentBuild.EntFields").toComplexType(),e);
+                        default:
+                            Context.error("Not implemented",Context.currentPos());
+                            return null;
+                    }
+                    properties = true;
                 case [name,FFun(f)]:
-                    switch (field.access) {
-                        case [Access.AStatic]:
-                        case [Access.AOverride]:
-                            switch name {
+                    if (field.access == null) continue;
+                    if (field.access.contains(Access.AOverride)) { //no...1
+                        switch (name) {
                             case "Initialize" | "Init":
                                 overridenInit = true;
                             case "Think":
                                 overridenThink = true;
-                            }
-                            field.meta.push({
-                                name: ":engineHook",
-                                pos: Context.currentPos()
-                            });
-                            fOverride.push(field);
-                        default:
-                            if (field.meta.filter((f) -> return f.name == ":entExpose").length > 0) {
-                                fOverride.push(field);
-                            }
+                        }
+                        //:engineHook??
+                        getDocsFromParent(field,superType); 
+                        fOverride.push(field);
                     }
-                default:
+                    if (field.meta.exists(f -> f.name == ":entExpose")) {
+                        fOverride.push(field);
+                    }
+                default: 
+                
             }
         }
-        switch [properties,esent] {
-        case [null,Swep | Sent]:
-            throw "No ent properties found";
-        default:
-        }
+
+
         var genName = switch (cls.meta.extract(":expose")) {
             case [{params : [{expr : EConst(CString(s,_))}]}]:
                 final newName = s.toLowerCase();
-		final name = InitMacro.entLuaStorage + "." + newName;
-		cls.meta.remove(":expose");
+                final name = InitMacro.entLuaStorage + "." + newName;
+                cls.meta.remove(":expose");
                 cls.meta.add(":expose",[macro $v{name}],Context.currentPos());
-		newName;
+                newName;
             default:
                 final newName = cls.name.toLowerCase();
-		final name = InitMacro.entLuaStorage + "." + newName;
+                final name = InitMacro.entLuaStorage + "." + newName;
                 cls.meta.add(":expose",[macro $v{name}],Context.currentPos());
                 newName;
         }
+
         var entLuaType = switch (esent) {
         case Sent:
-            var type = cls.findField("TYPE",true);
+            var type = findMeta(cls,":TYPE");
             switch (type) {
                 case null:
-                    trace("no TYPE for ENT definition");
-                    return null;
-                case _.expr() => {expr : TConst(TString(s))}:
+                    Context.warning("no TYPE for ENT definition",cls.pos);
+                    null;
+                case {params : [{expr: EConst(CString(s, _))}]}:
                     s;
                 default:
-                    trace("no TYPE for ENT definition");
-                    return null;
+                    Context.warning("no TYPE for ENT definition",cls.pos);
+                    null;
             }
         default:
             null;
         }
-        var superexpr = superType.meta.extract(":RealPanel")[0].params[0];
         cls.meta.add(":FirstPanel",[],Context.currentPos());
-        cls.meta.add(":RealPanel",[superexpr],Context.currentPos());
         var ourtype = Context.toComplexType(Context.getLocalType());
-        var superreal = switch (superexpr) {
-        case {expr: EArrayDecl(arr)}:
-            var pack = arr.map((e) -> e.getValue());
-            var name = pack[arr.length - 1];
-            pack.resize(arr.length - 1);
-            TPath({pack : pack,name : name});
-        default:
-            trace("failed");
-            return null;
-        }
-        var hxgen = (macro : gmod.helpers.GLinked<$superreal,$ourtype>);
-        
-        var classname = cls.name;
-        var fieldstor = macro class {
-            public final self:$superreal;
+        var gmodParent = extractGmodParent(superType);
+        var gen = PanelMacro.generateGmodSideExtern({target: cls,gmodParent: gmodParent,targetFields: fields});
+        var gmodType = gen.link.toComplexType();
+        var entClass = (macro : gmod.stringtypes.EntityClass<$gmodType>);
+        var tp:Array<String> = TypePathHelper.fromComplexType(gen.rawClass.toComplexType());
+        var strArr = tp.map((x) -> macro $v{x});
+        cls.meta.add(":RealExtern",[macro $a{strArr}],Context.currentPos());
+        var fieldStore = if (superType.findField("self") != null) {
+            macro class {
+                
+                #if server 
+                public static function create():$gmodType {
+                    return gmod.libs.EntsLib.Create(gclass);
+                }
+                #end
 
-            final function new(x:$superreal) {
-                self = x;
+                public static inline final gclass:$entClass = $v{genName};
+
+                public override function get_self():$gmodType {
+                    return cast self;
+                }
+            }
+        } else {
+            macro class {
+                #if server
+                public static function create():$gmodType {
+                    return gmod.libs.EntsLib.Create(gclass);
+                }
+                #end
+                var self:Dynamic;
+
+                public static inline final gclass:$entClass = $v{genName};
+
+                @:keep
+                final function new(x:Dynamic) {
+                    self = x;
+                }
+
+                public function get_self():$gmodType {
+                    return cast self;
+                }
             }
         }
-        if (!superType.meta.has(":FirstPanel")) {
-            fields.push(fieldstor.fields[0]);
-            fields.push(fieldstor.fields[1]);
+        replaceSelfInFields(fields,gmodType);
+        switch [properties,esent] {
+            case [null,Swep | Sent]: 
+                var props = macro class {static final properties = {}};
+                fieldStore.fields.push(props.fields[0]);
+                default:
+            }
+        final resultGClass = findMeta(superType,":gclass");
+        final base = switch (resultGClass) {
+            case null:
+                Context.warning("Could not intepret gclass meta",cls.pos);
+                "null";
+            case {params : [{expr: EConst(CString(s, _))}]}:
+                s;
+            default:
+                Context.warning("Could not intepret gclass meta",cls.pos);
+                "null";
         }
         generate.push({
             genName : genName,
@@ -149,14 +196,17 @@ class SentMacro {
             properties : properties,
             esent:esent,
             overridenThink: overridenThink,
-            overridenInit: overridenInit
+            overridenInit: overridenInit,
+            base : base
         });
         if (!onGenerate) {
             Context.onAfterGenerate(afterGenerate);
             onGenerate = true;
         }
         cls.meta.add(":keep",[],Context.currentPos());
-        return fields;
+        cls.meta.add(":gclass",[macro $v{genName}],Context.currentPos());
+        cls.meta.add(":Generated",[],Context.currentPos());
+        return fields.concat(fieldStore.fields);
     }
     
     public static function buildSent() {
@@ -172,9 +222,10 @@ class SentMacro {
     }
 
     static function afterGenerate() {
+        var temp = new haxe.Template(Resource.getString("gmodhaxe_sent"));
         var baseStorage = InitMacro.baseEntFolder;
         if (baseStorage == null) {
-            trace("no base storage to generate entity lua files");
+            Context.warning("Failed to save entity lua files. Try restarting the language server.",Context.currentPos());
             return;
         }
         var exportName = InitMacro.entLuaStorage;
@@ -192,90 +243,51 @@ class SentMacro {
                 _baseStorage = '$baseStorage/effects';
                 baseIdent = "EFFECT";
             }
-            var filebuf = new StringBuf();
-            var dyn:haxe.DynamicAccess<Dynamic> = cast gen.properties;
-            function insertKV(key:String,val:Dynamic,?table = "") {
-                if (Reflect.isObject(val) && Type.getClass(val) == null) {
-                    filebuf.add('$key = {\n');
-                    var structIterate:haxe.DynamicAccess<Dynamic> = val;
-                    for (key_2 => val_2 in structIterate) {
-                        insertKV(key_2,val_2,",");
-                    }
-                    filebuf.add('}$table\n');                    
-                } else if (Std.is(val,String)) {
-                    filebuf.add('$key = "$val"$table\n');
-                } else {
-                    filebuf.add('$key = $val$table\n');
-                }
-            }
-            for (key => val in dyn) {
-                insertKV('$baseIdent.$key',val);
-            }
-            switch gen.esent {
-            case Sent:
-                filebuf.add('$baseIdent.Type = "${gen.entLuaType}"\n');
-            default:
-            }
-            #if server
-                filebuf.add("AddCSLuaFile(\"cl_init.lua\")\n");
-            #end
-            switch (gen.esent) {
-            case Sent | Swep:
-                #if client
-                    filebuf.add('\nfunction $baseIdent:Think()\n');
-                    filebuf.add('\tif (not self._gHaxeInit) then\n');
-                    filebuf.add('\t\tself:Initialize()\n');
-                    filebuf.add('\tend\n');
-                    if (gen.overridenThink) {
-                        filebuf.add('\tself._gHaxeBurrow:Think()\n');
-                    }
-                    filebuf.add('end\n\n');
-                #end
-                filebuf.add('\nfunction $baseIdent:Initialize()\n');
-                filebuf.add('\tlocal ent = $exportName.${gen.genName}.new(self)\n');
-                filebuf.add("\tself._gHaxeBurrow = ent\n");
-                if (gen.overridenInit) {
-                    filebuf.add("\tself._gHaxeBurrow:Initialize()\n");
-                }
-                #if client
-                    filebuf.add("\tself._gHaxeInit = true\n");
-                #end
-                filebuf.add('end\n\n');
-            case Effect:
-                filebuf.add('\nfunction $baseIdent:Init(...)\n');
-                filebuf.add('\tlocal ent = $exportName.${gen.genName}.new(self)\n');
-                filebuf.add("\tself._gHaxeBurrow = ent\n");
-                if (gen.overridenInit) {
-                    filebuf.add("\tself._gHaxeBurrow:Init(...)\n");
-                }
-                filebuf.add('end\n\n');
-            }
-            for (field in gen.funcs) {
-                switch [field.name,gen.esent] {
-                case ["Initialize",_]:
-                    continue;
-                case ["Init",Effect]:
-                    continue;
-                #if client
-                case ["Think",Swep | Sent]:
-                    continue;
-                #end
-                default:
-                }
-                filebuf.add('function $baseIdent:${field.name}(...)\n');
-                filebuf.add('\tself._gHaxeBurrow:${field.name}(...)\n');
-                filebuf.add('end\n\n');
-            }
+            var funcShouldAdd = gen.funcs.map((f) -> {
+                Reflect.setField(f,"shouldAdd",switch [f.name,gen.esent] {
+                    case ["Initialize",_]:
+                        false;
+                    case ["Init",Effect]:
+                        false;
+                    #if client
+                    case ["Think",Swep | Sent]:
+                        false;
+                    #end
+                    default:
+                        true;
+                });
+                f;
+            });
+            var str = temp.execute({
+                baseIdent : baseIdent,
+                genName : gen.genName,
+                client : Context.defined("client"),
+                overridenThink : gen.overridenThink,
+                overridenInit : gen.overridenInit,
+                esent : gen.esent,
+                exportName : exportName,
+                entLuaType : gen.entLuaType,
+                sent : gen.esent == Sent,
+                sentSwep : switch gen.esent {
+                    case Sent | Swep:
+                        true;
+                    default:
+                        false;
+                },
+                funcs : funcShouldAdd,
+                base : gen.base
+            });
+            
             FileSystem.createDirectory('$_baseStorage/${gen.genName}');
             #if client
             switch (gen.esent) {
             case Effect:
-                File.saveContent('$_baseStorage/${gen.genName}/init.lua',filebuf.toString());
+                File.saveContent('$_baseStorage/${gen.genName}/init.lua',str);
             case Swep | Sent:
-                File.saveContent('$_baseStorage/${gen.genName}/cl_init.lua',filebuf.toString());
+                File.saveContent('$_baseStorage/${gen.genName}/cl_init.lua',str);
             }
             #elseif server
-            File.saveContent('$_baseStorage/${gen.genName}/init.lua',filebuf.toString());
+            File.saveContent('$_baseStorage/${gen.genName}/init.lua',str);
             #end
         }
     }

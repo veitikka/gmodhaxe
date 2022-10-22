@@ -6,9 +6,10 @@ package gmod.swep;
 	
 	You can find all available SWEP fields here: SWEP structure
 **/
+@:gclass("weapon_base")
 extern class SWEP extends Weapon {
 
-    public static inline final gclass = "base_weapon";
+    public static inline final gclass:EntityClass<SWEP> = "weapon_base";
 
     public final Owner:Null<Entity>;
 
@@ -27,7 +28,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function PostDrawViewModel(vm:Entity, weapon:Weapon, ply:Player):Void;
+    private function PostDrawViewModel(vm:Entity, weapon:Weapon, ply:Player):Void;
     #end
     
     /**
@@ -39,7 +40,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function Deploy():Bool;
+    private function Deploy():Bool;
     
     #if client
     /**
@@ -94,7 +95,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function GetViewModelPosition(EyePos:Vector, EyeAng:Angle):SwepGetViewModelPositionReturn;
+    private function GetViewModelPosition(EyePos:Vector, EyeAng:Angle):SwepGetViewModelPositionReturn;
     #end
     
     /**
@@ -143,7 +144,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function PreDrawViewModel(vm:Entity, weapon:Weapon, ply:Player):Void;
+    private function PreDrawViewModel(vm:Entity, weapon:Weapon, ply:Player):Void;
     #end
     
     /**
@@ -233,7 +234,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function DrawHUD():Void;
+    private function DrawHUD():Void;
     #end
     
     /**
@@ -271,7 +272,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function SecondaryAttack():Void;
+    private function SecondaryAttack():Void;
     
     #if client
     /**
@@ -321,7 +322,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function DrawWeaponSelection(x:Float, y:Float, width:Float, height:Float, alpha:Float):Void;
+    private function DrawWeaponSelection(x:Float, y:Float, width:Float, height:Float, alpha:Float):Void;
     #end
     #if client
     /**
@@ -372,7 +373,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function PrintWeaponInfo(x:Float, y:Float, alpha:Float):Void;
+    private function PrintWeaponInfo(x:Float, y:Float, alpha:Float):Void;
     #end
     
     /**
@@ -406,7 +407,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function DoImpactEffect(tr:TraceResult, damageType:DMG):Bool;
+    private function DoImpactEffect(tr:TraceResult, damageType:DMG):Bool;
     
     #if server
     /**
@@ -424,7 +425,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function KeyValue(key:String, value:String):Bool;
+    private function KeyValue(key:String, value:String):Bool;
     #end
     
     /**
@@ -455,7 +456,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function TranslateFOV(fov:Float):Float;
+    private function TranslateFOV(fov:Float):Float;
     
     #if client
     /**
@@ -467,7 +468,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function RenderScreen():Void;
+    private function RenderScreen():Void;
     #end
     #if client
     /**
@@ -482,7 +483,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function HUDShouldDraw(element:String):Bool;
+    private function HUDShouldDraw(element:String):Bool;
     #end
     #if server
     /**
@@ -492,7 +493,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function CanBePickedUpByNPCs():Bool;
+    private function CanBePickedUpByNPCs():Bool;
     #end
     #if server
     /**
@@ -505,7 +506,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function GetNPCRestTimes():SwepGetNPCRestTimesReturn;
+    private function GetNPCRestTimes():SwepGetNPCRestTimesReturn;
     #end
     #if server
     /**
@@ -522,7 +523,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function GetNPCBulletSpread(proficiency:WEAPON_PROFICIENCY):Float;
+    private function GetNPCBulletSpread(proficiency:WEAPON_PROFICIENCY):Float;
     #end
     #if client
     /**
@@ -541,7 +542,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function DrawWorldModelTranslucent():Void;
+    private function DrawWorldModelTranslucent():Void;
     #end
     #if server
     /**
@@ -564,7 +565,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function GetCapabilities():CAP;
+    private function GetCapabilities():CAP;
     #end
     
     /**
@@ -685,7 +686,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function Reload():Void;
+    private function Reload():Void;
     
     
     /**
@@ -742,7 +743,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function AcceptInput(inputName:String, activator:Entity, called:Entity, data:String):Bool;
+    private function AcceptInput(inputName:String, activator:Entity, called:Entity, data:String):Bool;
     #end
     #if client
     /**
@@ -763,7 +764,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function AdjustMouseSensitivity():Float;
+    private function AdjustMouseSensitivity():Float;
     #end
     #if client
     /**
@@ -798,7 +799,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function CustomAmmoDisplay():AnyTable;
+    private function CustomAmmoDisplay():AnyTable;
     #end
     
     /**
@@ -806,7 +807,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function OnRemove():Void;
+    private function OnRemove():Void;
     
     
     /**
@@ -816,7 +817,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function OwnerChanged():Void;
+    private function OwnerChanged():Void;
     
     
     /**
@@ -862,7 +863,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function Initialize():Void;
+    private function Initialize():Void;
     
     #if server
     /**
@@ -874,7 +875,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function EquipAmmo(ply:Player):Void;
+    private function EquipAmmo(ply:Player):Void;
     #end
     #if client
     /**
@@ -912,7 +913,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function CalcViewModelView(ViewModel:Entity, OldEyePos:Vector, OldEyeAng:Angle, EyePos:Vector, EyeAng:Angle):SwepCalcViewModelViewReturn;
+    private function CalcViewModelView(ViewModel:Entity, OldEyePos:Vector, OldEyeAng:Angle, EyePos:Vector, EyeAng:Angle):SwepCalcViewModelViewReturn;
     #end
     #if client
     /**
@@ -922,7 +923,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function GetTracerOrigin():Vector;
+    private function GetTracerOrigin():Vector;
     #end
     #if client
     /**
@@ -948,7 +949,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function CalcView(ply:Player, pos:Vector, ang:Angle, fov:Float):SwepCalcViewReturn;
+    private function CalcView(ply:Player, pos:Vector, ang:Angle, fov:Float):SwepCalcViewReturn;
     #end
     
     /**
@@ -989,7 +990,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function TranslateActivity(act:Float):Float;
+    private function TranslateActivity(act:Float):Float;
     
     
     /**
@@ -1025,7 +1026,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function Holster(weapon:Entity):Bool;
+    private function Holster(weapon:Entity):Bool;
     
     
     /**
@@ -1065,7 +1066,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function Think():Void;
+    private function Think():Void;
     
     
     /**
@@ -1131,7 +1132,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function FireAnimationEvent(pos:Vector, ang:Angle, event:Float, options:String):Bool;
+    private function FireAnimationEvent(pos:Vector, ang:Angle, event:Float, options:String):Bool;
     
     #if client
     /**
@@ -1197,7 +1198,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function DrawWorldModel():Void;
+    private function DrawWorldModel():Void;
     #end
     
     /**
@@ -1217,7 +1218,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function SetupDataTables():Void;
+    private function SetupDataTables():Void;
     
     
     /**
@@ -1257,7 +1258,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function PrimaryAttack():Void;
+    private function PrimaryAttack():Void;
     
     #if client
     /**
@@ -1269,7 +1270,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function ViewModelDrawn(ViewModel:Entity):Void;
+    private function ViewModelDrawn(ViewModel:Entity):Void;
     #end
     
     /**
@@ -1300,7 +1301,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function OnDrop():Void;
+    private function OnDrop():Void;
     #end
     #if server
     /**
@@ -1347,7 +1348,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function DoDrawCrosshair(x:Float, y:Float):Bool;
+    private function DoDrawCrosshair(x:Float, y:Float):Bool;
     #end
     #if server
     /**
@@ -1361,7 +1362,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function GetNPCBurstSettings():SwepGetNPCBurstSettingsReturn;
+    private function GetNPCBurstSettings():SwepGetNPCBurstSettingsReturn;
     #end
     #if client
     /**
@@ -1371,7 +1372,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function ShouldDrawViewModel():Bool;
+    private function ShouldDrawViewModel():Bool;
     #end
     
     /**
@@ -1383,7 +1384,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function OnRestore():Void;
+    private function OnRestore():Void;
     
     
     /**
@@ -1391,7 +1392,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function OnReloaded():Void;
+    private function OnReloaded():Void;
     
     #if client
     /**
@@ -1403,7 +1404,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function FreezeMovement():Bool;
+    private function FreezeMovement():Bool;
     #end
     #if server
     /**
@@ -1415,7 +1416,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function Equip(NewOwner:Entity):Void;
+    private function Equip(NewOwner:Entity):Void;
     #end
     
     /**
@@ -1437,7 +1438,7 @@ extern class SWEP extends Weapon {
     **/
     
     @:hook
-    function DrawHUDBackground():Void;
+    private function DrawHUDBackground():Void;
     #end
     
 }
