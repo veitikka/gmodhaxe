@@ -1,6 +1,6 @@
 # gmodhaxe
 
-Haxe externs for gmod + macros intended for gamemode development. [Haxe](https://haxe.org) is a strictly typed language that compiles to lua (+ many other languages like javascript/c++/c#). 
+Haxe externs for gmod + macros intended for gamemode development. [Haxe](https://haxe.org) is a strictly typed language that compiles to lua (+ many other languages like javascript/c++/c#).
 
 All externs are fully client/server context dependent, so will only work in proper context
 (i.e only functions that exist in server/client will autocomplete/build in current context)
@@ -14,7 +14,7 @@ Haxe comes with some advantages over just plain (gmod) lua development
 
 ### Pros
 
-- Free autocompletion and compiler 
+- Free autocompletion and compiler
 
 Not just hacked onto lua, and so a lot more reliable
 
@@ -25,12 +25,12 @@ Type all the things! Compile errors instead of runtime errors! Horray!
 When developing a gamemode, nothing is worse than being trapped in the cycle of save code -> run through game -> mispelled variable name -> back to square one
 
 This might be because I'm a bad developer though...
-    
+
 - Target defines for server + client
 
 Goodbye shared.lua, and unavaliable functions cluttering your autocompletion solution
 
-- Macros mean we can take post compile steps 
+- Macros mean we can take post compile steps
 
 This enables gmodhaxe to copy your build on save, meaning you can develop a lua addon from your documents folder instead of delving into the depths of your gmod installation each time
 
@@ -38,7 +38,7 @@ This enables gmodhaxe to copy your build on save, meaning you can develop a lua 
 
 Class syntax is free, and always the same instead of being DIY
 
-- Cross compilation 
+- Cross compilation
 
 This means you can create projects that talk to gmod lua in one consistent language + syntax. Less context switching required
 
@@ -86,7 +86,7 @@ If you like lua because of it's dynamic typing, there's not much point in using 
 
 [Download haxe](https://haxe.org/download/)
 
-Install [vscode](https://code.visualstudio.com/) + [vshaxe](https://marketplace.visualstudio.com/items?itemName=nadako.vshaxe) (highly recommended) 
+Install [vscode](https://code.visualstudio.com/) + [vshaxe](https://marketplace.visualstudio.com/items?itemName=nadako.vshaxe) (highly recommended)
 
 Install gmodhaxe by running the following command
 `haxelib install gmodhaxe`
@@ -124,7 +124,7 @@ If you want to automatically copy files on a successful build, uncomment this li
 
 If you have your own custom hxml setup, ensure you include the lines
 
-`--macro gmod.helpers.macros.InitMacro.init()` 
+`--macro gmod.helpers.macros.InitMacro.init()`
 
 `--cmd haxe -lib gmodhaxe --run gmod.helpers.macros.PostCompileMacro`
 
@@ -138,7 +138,7 @@ For more details, check [here](https://haxe.org/manual/compiler-usage-hxml.html)
 
 ## Layout
 
-`gmod.Gmod` 
+`gmod.Gmod`
 
 All the global library functions of Gmod, and some variables. e.g [IsValid](https://wiki.facepunch.com/gmod/Global.IsValid), [CurTime](https://wiki.facepunch.com/gmod/Global.CurTime), [GAMEMODE](https://wiki.facepunch.com/gmod/gmod.GetGamemode)
 
@@ -160,7 +160,7 @@ Gmod enums. These are always retrieved from the global table.
 
 `gmod/stringtypes`
 
-Stringly typed gmod helper abstracts. You'll find abstracts like `Hook` and `EntityClass` here. If you combine them with thier respective `gmod.libs` functions, you'll have more type safe results. 
+Stringly typed gmod helper abstracts. You'll find abstracts like `Hook` and `EntityClass` here. If you combine them with thier respective `gmod.libs` functions, you'll have more type safe results.
 
 For example, using a `Hook` abstract e.g `gmod.stringtypes.Hook.GMHooks.Think` (corresponding to the string `"Think"`) along with the library function `gmod.libs.HookLib.Add` will only allow you to add a function that conforms to a `Think` hook - a function that takes no arguments and returns nothing.
 
@@ -181,15 +181,15 @@ Building macros. If you want to build a custom version of one of these, then ext
 ## Examples
 
 ### Clientside/serverside
-```lua 
-if CLIENT then 
-... 
+```lua
+if CLIENT then
+...
 end
-``` 
-becomes 
-```haxe 
-#if client 
-... 
+```
+becomes
+```haxe
+#if client
+...
 #end
 ```
 You can use this with variables and classes too, to have clientside/serverside only variables/classes. Otherwise, everything is shared.
@@ -217,7 +217,7 @@ if (time > 0) {
 ```
 ### Loops
 ```lua
-for index,player in pairs(player.GetAll()) do 
+for index,player in pairs(player.GetAll()) do
   player:SetPos(Vector(100,50,10))
 end
 ```
@@ -243,14 +243,14 @@ If you wish to access haxe functions, variables or classes from a different lua 
 ```haxe
 
 class Test {
-  
+
   @:expose("func")
   static function exposedFuncShort() {
   }
-  
+
   @:expose
   static function exposedFuncLong() {
-  
+
   }
 }
 ```
@@ -293,7 +293,7 @@ For example, to add a think hook to your function
 ```haxe
 
 class Example {
-  
+
   @:gmodHook(Think)
   @:gmodHook(Think,"myhookname") //if you wish to name the hook
   static function myThinkHook() {
@@ -312,17 +312,17 @@ class MyGamemodeHooks extends gmod.helpers.gamemode.GMBuild<gmod.gamemode.GM> {
 
   override function Think() {
     trace("Thinking...");
-    
+
     //if you need to refer to the underlying gamemode table use self instead of this
     //i.e self.Think()
   }
-  
+
   //If you want to a haxe function to be exposed to the gamemode table (i.e can use it in lua), use the following metadata
   @:exposeGM
   function exposedFunction() {
-  
+
   }
-  
+
 }
 ```
 
@@ -333,23 +333,23 @@ Functions aren't automatically overridden, so you must create a new instance of 
 
 ```haxe
 class MyCoolEntity extends gmod.helpers.sent.SentBuild<gmod.sent.ENT_ANIM> {
-  
+
   //required
   final properties:gmod.sent.SentBuild.EntFields = {
     Base : "base_entity"
     //other fields go here. in vscode can control + space to see fields
   }
-  
+
   override function Initialize() {
     trace("new entity!");
-    
+
     //again, use self to refer to underlying object
     self.SetPos(new Vector(100,-10,50));
   }
-  
-  @:exposeENT
+
+  @:entExpose
   function exposedFunc() {
-  
+
   }
 }
 ```
@@ -383,7 +383,7 @@ typedef MyTestMessage = {
 class MyClass {
 
   static var net_test = new gmod.helpers.net.NET_Server<"netMessageName",MyTestMessage>;
-  
+
   #if server
   static public function send() {
     net_test.send({
@@ -398,7 +398,7 @@ class MyClass {
   static public function initmessage() {
     net_test.addReceiver("testIdent",recvTest);
   }
-  
+
   static function recvTest(data:MyTestMessage) {
     trace(data);
   }
